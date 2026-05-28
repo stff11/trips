@@ -1,0 +1,47 @@
+# File: netlify.toml
+
+[build]
+  command = "npm run build"
+  publish = "dist"
+  functions = "netlify/functions"
+
+[build.environment]
+  NODE_VERSION = "20"
+
+[dev]
+  command = "vite"
+  targetPort = 3000
+  port = 8888
+
+# Maps /api/* calls to your serverless functions
+[[redirects]]
+  from = "/api/*"
+  to = "/.netlify/functions/:splat"
+  status = 200
+
+# Ensures SPA routing works correctly
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+
+# Proxying local dev assets
+[[redirects]]
+  from = "/@vite/*"
+  to = "http://localhost:3000/@vite/:splat"
+  status = 200
+
+[[redirects]]
+  from = "/src/*"
+  to = "http://localhost:3000/src/:splat"
+  status = 200
+
+[[redirects]]
+  from = "/node_modules/*"
+  to = "http://localhost:3000/node_modules/:splat"
+  status = 200
+
+# Optimization for function binary handling
+[functions."process-uploads"]
+  accepted_encodings = ["br", "gzip", "deflate"]
+  binary_media_types = ["multipart/form-data", "image/*"]
