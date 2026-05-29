@@ -16,6 +16,8 @@ export const trips = pgTable('trips', {
 
 export const photos = pgTable('photos', {
   id: serial('id').primaryKey(),
+  tripId: integer('trip_id')
+    .references(() => trips.id, { onDelete: 'cascade' }),
   filename: text('filename').notNull(),
   originalName: text('original_name').notNull(),
   filePath: text('file_path').notNull(),
@@ -30,6 +32,5 @@ export const photos = pgTable('photos', {
   lng: real('lng'),
   altitude: real('altitude'),
   takenAt: timestamp('taken_at', { withTimezone: true }),
-  tripId: integer('trip_id'),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
 });

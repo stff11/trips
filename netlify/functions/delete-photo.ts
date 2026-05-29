@@ -2,9 +2,7 @@
 import { Handler } from '@netlify/functions';
 import { v2 as cloudinary } from 'cloudinary';
 import { eq } from 'drizzle-orm';
-// @ts-ignore
 import { db } from '../../src/db'; 
-// @ts-ignore
 import { photos } from '../../src/db/schema';
 
 cloudinary.config({
