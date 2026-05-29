@@ -38,8 +38,8 @@ body {
 }
 
 .gold-pin-head {
-  width: 15px;
-  height: 15px;
+  width: 12px;
+  height: 12px;
   background-color: gold;
   border-radius: 50%;
   box-shadow: 0 2px 4px rgba(0,0,0,0.3);
@@ -49,9 +49,9 @@ body {
 .gold-pin-head::after {
   content: '';
   position: absolute;
-  top: 14px; /* Tucks it just behind the circle */
+  top: 12px; /* Tucks it just behind the circle */
   left: 50%;
-  width: 2px;
+  width: 1px;
   height: 12px;
   background-color: gold;
   transform: translateX(-50%);

@@ -24,7 +24,7 @@ function MapController({ center }: { center: [number, number] }) {
 
 export default function CinematicMap({ activeCoordinates, markers }: { activeCoordinates: [number, number], markers: any[] }) {
   return (
-    <div className="absolute inset-0 z-0 w-screen h-screen grayscale-[0%] contrast-[100%] brightness-[110%]">
+    <div className="absolute inset-0 z-0 w-screen h-screen">
       <MapContainer 
         center={activeCoordinates} 
         zoom={4} 

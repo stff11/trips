@@ -1,29 +1,44 @@
-// 📁 components/PhotoContextMenu.tsx
+// components/PhotoContextMenu.tsx
+interface PhotoContextMenuProps {
+  onDeleteTrip?: (tripId: number) => void;
+  onDeletePhoto?: (photoId: number) => void; 
+  onEditName?: (tripId: number) => void;
+  onSetCover?: (photoId: number) => void;
+  tripId: number;
+  photoId?: number; // Optional, only needed if acting on a specific photo
+}
 
-interface ContextMenuProps {
-    x: number;
-    y: number;
-    photoId: number;
-    tripId: number;
-    onClose: () => void;
-    onCoverSet: () => void;
-  }
-
-export const PhotoContextMenu: React.FC<ContextMenuProps> = ({ 
-  x, y, photoId, tripId, onClose, onCoverSet 
-}) => {
-  const setCover = async () => {
-    await fetch('/.netlify/functions/manage-trip', {
-      method: 'POST',
-      body: JSON.stringify({ action: 'SET_COVER', tripId, photoId })
-    });
-    onCoverSet();
-    onClose();
-  };
-
+export const PhotoContextMenu = ({ 
+  onDeleteTrip,
+  onDeletePhoto,
+  onEditName,
+  onSetCover,
+  tripId,
+  photoId
+}: PhotoContextMenuProps) => {
   return (
-    <div style={{ position: 'fixed', top: y, left: x, background: 'white', border: '1px solid #ccc', padding: '5px', zIndex: 1000 }}>
-      <button onClick={setCover}>Set as Album Cover</button>
+    <div className="absolute z-50 bg-white rounded-lg shadow-xl border border-zinc-200 py-1 w-48 animate-in fade-in zoom-in duration-100">
+      
+      {/* Photo Actions */}
+      {photoId && (
+        <>
+          <button onClick={() => onSetCover?.(photoId)} className="block w-full text-left px-4 py-2 hover:bg-zinc-100 text-xs text-zinc-700">
+            Set as Album Cover
+          </button>
+          <button onClick={() => onDeletePhoto?.(photoId)} className="block w-full text-left px-4 py-2 hover:bg-zinc-100 text-xs text-red-600">
+            Delete Photo
+          </button>
+          <div className="h-px bg-zinc-200 my-1" />
+        </>
+      )}
+
+      {/* Album Actions */}
+      <button onClick={() => onEditName?.(tripId)} className="block w-full text-left px-4 py-2 hover:bg-zinc-100 text-xs text-zinc-700">
+        Edit Album Name
+      </button>
+      <button onClick={() => onDeleteTrip?.(tripId)} className="block w-full text-left px-4 py-2 hover:bg-zinc-100 text-xs text-red-600">
+        Delete Entire Album
+      </button>
     </div>
   );
 };
