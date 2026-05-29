@@ -1,5 +1,5 @@
 // 📁 File: /netlify/functions/manage-trip.ts
-import { Handler } from '@netlify/functions';
+import { Handler, HandlerEvent } from '@netlify/functions';
 import { v2 as cloudinary } from 'cloudinary';
 import { db } from '../../src/db';
 import { photos, trips } from '../../src/db/schema';
@@ -11,19 +11,33 @@ cloudinary.config({
   api_secret: process.env.CLOUDINARY_API_SECRET,
 });
 
-export const handler: Handler = async (event) => {
-  const { action, tripId, newName } = JSON.parse(event.body || '{}');
+// Define the shape of our incoming request body
+interface RequestBody {
+  action: 'EDIT' | 'DELETE' | 'SET_COVER';
+  tripId: string | number;
+  newName?: string;
+  photoId?: number;
+}
 
-  // Ensure tripId is a valid number
+export const handler: Handler = async (event: HandlerEvent) => {
+  const body: RequestBody = JSON.parse(event.body || '{}');
+  const { action, tripId, newName, photoId } = body;
+
   const targetId = Number(tripId);
   if (isNaN(targetId)) return { statusCode: 400, body: 'Invalid tripId provided' };
 
   try {
     if (action === 'EDIT') {
-      await db.update(trips).set({ name: newName }).where(eq(trips.id, Number(tripId)));
+      if (!newName) return { statusCode: 400, body: 'Missing newName' };
+      await db.update(trips).set({ name: newName }).where(eq(trips.id, targetId));
+      
+    } else if (action === 'SET_COVER') {
+      // FIX: photoId is now defined and typed
+      if (!photoId) return { statusCode: 400, body: 'Missing photoId' };
+      await db.update(trips).set({ coverPhotoId: photoId }).where(eq(trips.id, targetId));
     } else if (action === 'DELETE') {
       // 1. Fetch all photos for this trip so we have their public IDs
-      const tripPhotos = await db.select().from(photos).where(eq(photos.tripId, tripId));
+      const tripPhotos = await db.select().from(photos).where(eq(photos.tripId, targetId));
 
       // 2. Delete each photo from Cloudinary
       for (const photo of tripPhotos) {
@@ -38,7 +52,7 @@ export const handler: Handler = async (event) => {
       }
       // 3. Delete the trip from DB 
       // (The 'onDelete: cascade' will now automatically delete the records in the 'photos' table)
-      await db.delete(trips).where(eq(trips.id, tripId));
+      await db.delete(trips).where(eq(trips.id, targetId));
     }
 
     return {

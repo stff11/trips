@@ -6,6 +6,7 @@ import PhotoGallery from './components/PhotoGallery';
 import Lightbox from './components/Lightbox';
 import FloatingTimeline from './components/FloatingTimeline';
 import { Upload, Compass, Layers, CalendarRange, Sparkles, AlertCircle, Map as MapIcon } from 'lucide-react';
+import './index.css';
 
 // 🌟 Alias overrides to dynamically bypass restrictive property filters on sub-components
 const DynamicTripCards = TripCards as any;
@@ -81,7 +82,7 @@ export default function App() {
 
   // --- Management Mutation Calls ---
   const executeDelete = async () => {
-    console.log("Attempting delete for:", contextMenu); // 🌟 Check this log in console
+    console.log("Attempting delete for:", contextMenu); // Check this log in console
     if (!contextMenu) return;
     const confirmBlock = window.confirm(`Are you sure you want to completely purge this ${contextMenu.type}?`);
     if (!confirmBlock) { setContextMenu(null); return; }
@@ -230,8 +231,8 @@ export default function App() {
       <CinematicMap activeCoordinates={mapCenter} markers={trips} />
 
       {/* Cinematic Vignette Overlays */}
-      <div className="absolute inset-0 pointer-events-none bg-gradient-to-r from-zinc-950/90 via-transparent to-zinc-950/40 z-0" />
-      <div className="absolute inset-0 pointer-events-none bg-gradient-to-b from-zinc-950/50 via-transparent to-zinc-950/90 z-0" />
+      {/* <div className="absolute inset-0 pointer-events-none bg-gradient-to-r from-zinc-950/90 via-transparent to-zinc-950/40 z-0" />
+      <div className="absolute inset-0 pointer-events-none bg-gradient-to-b from-zinc-950/50 via-transparent to-zinc-950/90 z-0" /> */}
 
       {/* Full Window Drop Zone Screen Curtain */}
       {isDragging && (
