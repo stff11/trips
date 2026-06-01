@@ -62,3 +62,13 @@ body {
 .leaflet-control-container {
   display: none;
 }
+
+.wanderlens-popup .leaflet-popup-content-wrapper {
+  border-radius: 12px;
+  padding: 4px;
+  background: #ffffff;
+}
+
+.wanderlens-popup .leaflet-popup-tip {
+  background: #ffffff;
+}

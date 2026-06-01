@@ -1,4 +1,5 @@
 import { pgTable, serial, text, integer, real, timestamp } from 'drizzle-orm/pg-core';
+import { relations } from 'drizzle-orm';
 
 export const trips = pgTable('trips', {
   id: serial('id').primaryKey(),
@@ -22,15 +23,26 @@ export const photos = pgTable('photos', {
   originalName: text('original_name').notNull(),
   filePath: text('file_path').notNull(),
   mimeType: text('mime_type').notNull(),
-  fileSize: integer('file_size').notNull(),
-  fileHash: text('file_hash'),
+  fileHash: text('file_hash').unique(),
   cloudinaryPublicId: text('cloudinary_public_id'),
   cloudinaryUrl: text('cloudinary_url'),
-  width: integer('width'),
-  height: integer('height'),
   lat: real('lat'),
   lng: real('lng'),
-  altitude: real('altitude'),
   takenAt: timestamp('taken_at', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
 });
+
+export const tripsRelations = relations(trips, ({ one }) => ({
+  coverPhoto: one(photos, {
+    fields: [trips.coverPhotoId],
+    references: [photos.id],
+  }),
+}));
+
+export const photosRelations = relations(photos, ({ one }) => ({
+  // This tells Drizzle: "Photos belongs to one trip"
+  trip: one(trips, {
+    fields: [photos.tripId],
+    references: [trips.id],
+  }),
+}));

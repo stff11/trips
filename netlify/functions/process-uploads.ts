@@ -5,6 +5,7 @@ import exifr from 'exifr';
 import { eq, asc } from 'drizzle-orm';
 import { db } from '../../src/db'; 
 import { photos, trips } from '../../src/db/schema';
+import crypto from 'crypto';
 
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
@@ -61,6 +62,16 @@ export const handler: Handler = async (event) => {
     
     for (const item of incomingPhotos) {
       const buffer = Buffer.from(item.base64Data, 'base64');
+      // Generate the fingerprint
+      const fileHash = crypto.createHash('md5').update(buffer).digest('hex');
+
+      // Check if it already exists
+      const existing = await db.select().from(photos).where(eq(photos.fileHash, fileHash));
+      if (existing.length > 0) {
+        console.log(`Skipping duplicate: ${item.name}`);
+        continue; // Skip this photo as duplicate
+      }
+
       const metadata = await exifr.parse(buffer, ['GPSLatitude', 'GPSLongitude', 'DateTimeOriginal']).catch(() => ({}));
       
       const cloudinaryResult = await new Promise<any>((resolve, reject) => {
@@ -71,24 +82,37 @@ export const handler: Handler = async (event) => {
       const lng = toDecimal(metadata.GPSLongitude);
       const takenAt = metadata.DateTimeOriginal ? new Date(metadata.DateTimeOriginal) : new Date();
 
-      // 1. Find existing trip using the logic from tripGrouping.ts
-      const existingTrips = await db.select().from(trips).orderBy(asc(trips.startDate));
-      let targetTripId: number | null = null;
+const existingTrips = await db.select().from(trips).orderBy(asc(trips.startDate));
+let targetTripId: number | null = null;
 
-      for (const trip of existingTrips) {
-        if (!trip.centerLat || !trip.centerLng || lat === null || lng === null) continue;
-        const distOk = haversineKm(lat, lng, Number(trip.centerLat), Number(trip.centerLng)) <= 100;
-        const timeOk = (Math.abs(takenAt.getTime() - new Date(trip.startDate).getTime()) / (86400000)) <= 5;
+for (const trip of existingTrips) {
+  if (!trip.centerLat || !trip.centerLng || lat === null || lng === null) continue;
+  
+  const distOk = haversineKm(lat, lng, Number(trip.centerLat), Number(trip.centerLng)) <= 100;
+  
+  // Logic Fix: Check if the photo falls within a 5-day proximity of the ENTIRE duration, 
+  // not just the startDate.
+  const tripStart = new Date(trip.startDate);
+  const tripEnd = new Date(trip.endDate);
+  const isWithinTimeWindow = (takenAt.getTime() >= tripStart.getTime() - 5 * 86400000) && 
+                             (takenAt.getTime() <= tripEnd.getTime() + 5 * 86400000);
 
-        if (distOk && timeOk) {
-          targetTripId = trip.id;
-          await db.update(trips).set({ 
-            endDate: takenAt > trip.endDate ? takenAt : trip.endDate,
-            photoCount: trip.photoCount + 1 
-          }).where(eq(trips.id, trip.id));
-          break;
-        }
-      }
+  if (distOk && isWithinTimeWindow) {
+    targetTripId = trip.id;
+    
+    // Update boundaries
+    const newStartDate = takenAt < tripStart ? takenAt : tripStart;
+    const newEndDate = takenAt > tripEnd ? takenAt : tripEnd;
+    
+    await db.update(trips).set({ 
+      startDate: newStartDate,
+      endDate: newEndDate,
+      photoCount: trip.photoCount + 1 
+    }).where(eq(trips.id, trip.id));
+    
+    break;
+  }
+}
 
       // 2. Create new trip if no match
       if (!targetTripId) {
@@ -110,13 +134,13 @@ export const handler: Handler = async (event) => {
       // 3. Insert Photo
       const [newPhoto] = await db.insert(photos).values({
         tripId: targetTripId,
+        fileHash: fileHash,
         filename: item.name,
         originalName: item.name,
         filePath: cloudinaryResult.secure_url,
         cloudinaryUrl: cloudinaryResult.secure_url,
         cloudinaryPublicId: cloudinaryResult.public_id,
         mimeType: item.type || 'image/jpeg',
-        fileSize: item.size || 0,
         lat: lat?.toString(),
         lng: lng?.toString(),
         takenAt: takenAt

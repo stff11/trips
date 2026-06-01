@@ -22,7 +22,27 @@ function MapController({ center }: { center: [number, number] }) {
   return null;
 }
 
-export default function CinematicMap({ activeCoordinates, markers }: { activeCoordinates: [number, number], markers: any[] }) {
+const getOptimizedCloudinaryUrl = (url: string, width: number = 300) => {
+  if (!url || !url.includes('/upload/')) return url;
+  const [baseUrl, path] = url.split('/upload/');
+  return `${baseUrl}/upload/w_${width},c_fill,f_auto,q_auto/${path}`;
+};
+
+// Helper function to resolve the cover image (optimized for the small popup)
+const getPopupImageUrl = (trip: any) => {
+  if (!trip.coverPhotoId || !trip.photos) return '/placeholder.jpg';
+  const coverPhoto = trip.photos.find((p: any) => p.id === trip.coverPhotoId);
+  // Using 300px width for a sharp popup thumbnail
+  return coverPhoto ? getOptimizedCloudinaryUrl(coverPhoto.cloudinaryUrl, 300) : '/placeholder.jpg';
+};
+
+interface CinematicMapProps {
+  activeCoordinates: [number, number];
+  markers: any[];
+  onSelectTrip: (trip: any) => void; 
+}
+
+export default function CinematicMap({ activeCoordinates, markers, onSelectTrip }: CinematicMapProps) {
   return (
     <div className="absolute inset-0 z-0 w-screen h-screen">
       <MapContainer 
@@ -38,13 +58,30 @@ export default function CinematicMap({ activeCoordinates, markers }: { activeCoo
           <Marker 
             key={trip.id} 
             position={[trip.centerLat, trip.centerLng]}
-            icon={goldIcon} // Use the divIcon here
+            icon={goldIcon} 
           >
             <Popup>
-              <div className="p-1 font-sans">
-                <p className="font-bold text-zinc-900 text-xs uppercase tracking-wider">{trip.name}</p>
-                <p className="text-[10px] text-zinc-500 mt-0.5">{trip.photos?.length || 0} Files Archived</p>
-              </div>
+            <button
+                className="cursor-pointer group" 
+                onClick={(e) => {
+                  console.log("Attempting to select trip:", trip.id);
+                  // 1. Stop the click from being "eaten" by the Map or Leaflet
+                  e.stopPropagation();
+                  // 2. Explicitly trigger the selection
+                  onSelectTrip(trip);
+                }}
+              >
+                <img 
+                  src={getPopupImageUrl(trip)} 
+                  className="w-full h-32 object-cover rounded-lg mb-2 transition-transform group-hover:scale-[1.02]" 
+                  alt={trip.name}
+                />
+                <span className="font-bold text-zinc-900 text-xs uppercase tracking-wider">{trip.name}</span>
+                <br/>
+                <span>{trip.locationName}</span>
+                <br/>
+                <span className="text-[10px] text-zinc-500 mt-0.5 font-medium">{trip.photos?.length || 0} Photos</span>
+              </button>
             </Popup>
           </Marker>
         ))}
