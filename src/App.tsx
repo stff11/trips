@@ -1,4 +1,3 @@
-// 📁 File: /src/App.tsx
 import { useState, useEffect, useMemo } from 'react';
 import CinematicMap from './components/CinematicMap';
 import TripCards from './components/TripCards';
@@ -14,60 +13,66 @@ export default function App() {
   const [view, setView] = useState<'map' | 'journeys'>('map');
   const [isDragging, setIsDragging] = useState(false);
   const [contextMenu, setContextMenu] = useState<any>(null);
-  const [lightbox, setLightbox] = useState<{ open: boolean; index: number; photos: any[] }>({ 
-    open: false, index: 0, photos: [] 
-  });
-
-  // Derived state: This ensures selectedTrip is always in sync with the latest trips data
-  // without needing manual state updates inside reloadData.
-  const selectedTrip = useMemo(() => 
-    trips.find(t => t.id === selectedTripId) || null, 
-  [trips, selectedTripId]);
-
-  const handleMapTripSelect = (trip: any) => {
-    setSelectedTripId(trip.id); // Set the trip
-    setView('journeys');    // Force the view switch so you leave the map
-  };
+  const [lightbox, setLightbox] = useState({ open: false, index: 0, photos: [] as any[] });
 
   const reloadData = async () => {
     try {
       const res = await fetch('/api/fetch-trips');
-      if (res.ok) {
-        const data = await res.json();
-        setTrips(data);
-        // No manual setSelectedTrip update needed! 
-        // useMemo will automatically update selectedTrip when trips change.
-        // if (selectedTrip) {
-        //   setSelectedTrip(data.find((t: any) => t.id === selectedTrip.id) || null);
-        // }
-      }
-    } catch (err) { console.error("Data fetch error:", err); }
+      if (res.ok) setTrips(await res.json());
+    } catch (err) { console.error("Fetch error:", err); }
   };
-  // const selectedTrip = trips.find(t => t.id === selectedTripId) || null;
+
+  const selectedTrip = useMemo(() => 
+    trips.find(t => t.id === selectedTripId) || null, 
+  [trips, selectedTripId]);
+  
+  const handleMapTripSelect = (trip: any) => {
+    setSelectedTripId(trip.id);
+    setView('journeys');
+  };
 
   useEffect(() => { void reloadData(); }, []);
 
-  // --- Upload Logic ---
-  const uploadFiles = async (files: FileList) => {
-    try {
-      const convertedFiles = await Promise.all(
-        Array.from(files).map((file) => new Promise<any>((resolve) => {
-          const reader = new FileReader();
-          reader.onload = (e) => resolve({ name: file.name, base64Data: (e.target?.result as string).split(',')[1] });
-          reader.readAsDataURL(file);
-        }))
-      );
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [progress, setProgress] = useState(0); // 0 to 100
+  
+// Unified Drag/Upload Logic
+const handleFileUpload = async (files: FileList) => {
+  const fileArray = Array.from(files);
+  setIsDragging(false);
+  setIsProcessing(true);
 
+  const processFile = (file: File) => {
+    return new Promise<any>((resolve) => {
+      const reader = new FileReader();
+      reader.onload = (e) => resolve({ 
+        name: file.name, 
+        base64Data: (e.target?.result as string).split(',')[1],
+        type: file.type 
+      });
+      reader.readAsDataURL(file);
+    });
+  };
+
+  for (let i = 0; i < fileArray.length; i++) {
+    const converted = await processFile(fileArray[i]);
+
+    try {
+      // Send one by one
       await fetch('/api/process-uploads', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ photos: convertedFiles, tripId: selectedTrip?.id || null })
+        body: JSON.stringify({ photos: [converted], tripId: selectedTrip?.id || null })
       });
-      await reloadData();
-    } catch (err) { console.error("Upload error:", err); }
-  };
+      setProgress(Math.round(((i + 1) / fileArray.length) * 100));
+    } catch (err) {
+      console.error("Upload failed for:", fileArray[i].name);
+    }
+  }
+  setIsProcessing(false);
+  await reloadData();
+};
 
-  // --- Unified Management Logic ---
   const handleAction = async (action: 'delete' | 'edit' | 'cover', type: 'trip' | 'photo', id: number, extra?: any) => {
     setContextMenu(null);
     if (action === 'delete') {
@@ -86,11 +91,7 @@ export default function App() {
       await fetch('/api/manage-trip', { 
         method: 'POST', 
         headers: { 'Content-Type': 'application/json' }, 
-        body: JSON.stringify({ 
-          action: 'SET_COVER', 
-          tripId: extra?.tripId, 
-          photoId: id 
-        }) 
+        body: JSON.stringify({ action: 'SET_COVER', tripId: extra?.tripId, photoId: id }) 
       });
     }
     await reloadData();
@@ -98,34 +99,31 @@ export default function App() {
 
   return (
     <div 
-      className="flex w-screen h-screen bg-[#0a0c14] text-zinc-100 overflow-hidden font-sans"
+      className="flex w-screen h-screen bg-[#0a0c14] text-zinc-100 font-sans"
       onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
       onDragLeave={() => setIsDragging(false)}
-      onDrop={(e) => { e.preventDefault(); setIsDragging(false); uploadFiles(e.dataTransfer.files); }}
+      onDrop={(e) => { e.preventDefault(); handleFileUpload(e.dataTransfer.files); }}
       onClick={() => setContextMenu(null)}
     >
-      {/* DRAG OVERLAY */}
-      {isDragging && <div className="absolute inset-0 z-50 bg-amber-500/10 border-4 border-dashed border-amber-500 flex items-center justify-center pointer-events-none font-bold text-amber-500 tracking-widest text-xl">DROP TO UPLOAD</div>}
+      {isDragging && <div className="absolute inset-0 z-50 bg-amber-500/10 border-4 border-dashed border-amber-500 flex items-center justify-center pointer-events-none font-bold text-amber-500 text-xl">DROP TO UPLOAD</div>}
 
-      {/* 1. LEFT SIDEBAR */}
       <nav className="w-64 border-r border-zinc-800/50 p-8 flex flex-col gap-12 z-20 bg-[#0a0c14]">
-        <div className="flex items-center gap-3"><div className="p-2 bg-amber-400 rounded-full"><Compass className="text-zinc-950" size={20}/></div><h1 className="font-bold tracking-tight text-lg">Photo Diary</h1></div>
+        <h1 className="font-bold text-lg flex items-center gap-3"><div className="p-2 bg-amber-400 rounded-full"><Compass size={20}/></div>Photo Diary</h1>
         <div className="flex flex-col gap-2">
-          <button onClick={() => setView('map')} className={`flex items-center gap-4 px-4 py-3 rounded-xl ${view === 'map' ? 'bg-zinc-800' : 'text-zinc-500'}`}><MapIcon size={18} /> Map</button>
-          <button onClick={() => setView('journeys')} className={`flex items-center gap-4 px-4 py-3 rounded-xl ${view === 'journeys' ? 'bg-zinc-800' : 'text-zinc-500'}`}><Compass size={18} /> Journeys</button>
+          <button onClick={() => setView('map')} className={`flex items-center gap-4 px-4 py-3 rounded-xl ${view === 'map' ? 'bg-zinc-800' : ''}`}><MapIcon size={18} /> Map</button>
+          <button onClick={() => setView('journeys')} className={`flex items-center gap-4 px-4 py-3 rounded-xl ${view === 'journeys' ? 'bg-zinc-800' : ''}`}><Compass size={18} /> Journeys</button>
         </div>
-        {/* Upload Button at bottom of Sidebar */}
-        <label className="cursor-pointer bg-amber-400 hover:bg-zinc-700 text-white p-4 rounded-2xl flex items-center justify-center gap-2 font-bold text-xs transition-all">
-          <Plus size={16} /> UPLOAD PHOTOS
-          <input type="file" multiple className="hidden" onChange={(e) => e.target.files && uploadFiles(e.target.files)} />
+        <label className="cursor-pointer bg-amber-400 hover:bg-zinc-700 text-white p-4 rounded-2xl flex items-center justify-center gap-2 font-bold text-xs">
+          <Plus size={16} /> UPLOAD
+          <input type="file" multiple className="hidden" onChange={(e) => e.target.files && handleFileUpload(e.target.files)} />
         </label>
       </nav>
 
-      {/* 2. MAIN CONTENT AREA */}
+            {/* 2. MAIN CONTENT AREA */}
       <main className="flex-1 overflow-y-auto relative">
         {view === 'map' ? (
           <CinematicMap 
-            activeCoordinates={[49.8225, 19.0441]} 
+            activeCoordinates={[49.8225, 19.0441]} // Bielsko
             markers={trips} 
             onSelectTrip={handleMapTripSelect}
           />
@@ -154,6 +152,20 @@ export default function App() {
             />
           </div>
         )}
+        {isProcessing && (
+          <div className="fixed inset-0 z-[100] bg-zinc-950/80 flex flex-col items-center justify-center backdrop-blur-sm">
+            <div className="w-64 bg-zinc-900 border border-zinc-700 rounded-2xl p-6 shadow-2xl">
+              <h3 className="font-bold mb-2">Processing Photos...</h3>
+              <div className="w-full bg-zinc-700 h-2 rounded-full overflow-hidden">
+                <div 
+                  className="bg-amber-400 h-full transition-all duration-300" 
+                  style={{ width: `${progress}%` }}
+                />
+              </div>
+              <p className="text-xs text-zinc-400 mt-2 text-right">{progress}%</p>
+            </div>
+          </div>
+        )}
       </main>
 
       {/* CONTEXT MENU & LIGHTBOX PORTALS */}
@@ -180,3 +192,4 @@ export default function App() {
     </div>
   );
 }
+

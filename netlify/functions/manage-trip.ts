@@ -1,4 +1,4 @@
-// 📁 File: /netlify/functions/manage-trip.ts
+// File: /netlify/functions/manage-trip.ts
 import { Handler, HandlerEvent } from '@netlify/functions';
 import { v2 as cloudinary } from 'cloudinary';
 import { db } from '../../src/db';
@@ -32,7 +32,6 @@ export const handler: Handler = async (event: HandlerEvent) => {
       await db.update(trips).set({ name: newName }).where(eq(trips.id, targetId));
       
     } else if (action === 'SET_COVER') {
-      // FIX: photoId is now defined and typed
       if (!photoId) return { statusCode: 400, body: 'Missing photoId' };
       await db.update(trips).set({ coverPhotoId: photoId }).where(eq(trips.id, targetId));
     } else if (action === 'DELETE') {

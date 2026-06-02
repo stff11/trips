@@ -2,7 +2,7 @@
 import { Handler } from '@netlify/functions';
 import { neon } from '@neondatabase/serverless';
 import { drizzle } from 'drizzle-orm/neon-http';
-import { desc } from 'drizzle-orm';
+import { asc, desc } from 'drizzle-orm';
 import * as schema from '../../src/db/schema';
 
 const sql = neon(process.env.DATABASE_URL!);
@@ -31,7 +31,7 @@ export const handler: Handler = async (event) => {
     const allTrips = await db.select().from(schema.trips).orderBy(desc(schema.trips.startDate));
     
     // 2. Fetch all photos
-    const allPhotos = await db.select().from(schema.photos);
+    const allPhotos = await db.select().from(schema.photos).orderBy(asc(schema.photos.takenAt));
 
     // 3. Map photos arrays back into their respective trip parent objects manually
     const structuredData = allTrips.map((trip) => ({

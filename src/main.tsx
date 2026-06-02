@@ -7,6 +7,8 @@ import './index.css';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
 
+<script src="https://upload-widget.cloudinary.com/global/all.js" type="text/javascript"></script>
+
 // Re-route Leaflet's internal asset resolver to stable CDN assets.
 // This completely bypasses Vite's file bundling graph and removes the type errors.
 delete (L.Icon.Default.prototype as any)._getIconUrl;
