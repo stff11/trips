@@ -4,6 +4,7 @@ import TripCards from './components/TripCards';
 import PhotoGallery from './components/PhotoGallery';
 import Lightbox from './components/Lightbox';
 import { PhotoContextMenu } from './components/PhotoContextMenu';
+import TripCover from './components/TripCover';
 import { Compass, Map as MapIcon, ChevronLeft, Plus } from 'lucide-react';
 import './index.css';
 
@@ -107,6 +108,7 @@ const handleFileUpload = async (files: FileList) => {
     >
       {isDragging && <div className="absolute inset-0 z-50 bg-amber-500/10 border-4 border-dashed border-amber-500 flex items-center justify-center pointer-events-none font-bold text-amber-500 text-xl">DROP TO UPLOAD</div>}
 
+      {/* SIDE NAV */}
       <nav className="w-64 border-r border-zinc-800/50 p-8 flex flex-col gap-12 z-20 bg-[#0a0c14]">
         <h1 className="font-bold text-lg flex items-center gap-3"><div className="p-2 bg-amber-400 rounded-full"><Compass size={20}/></div>Photo Diary</h1>
         <div className="flex flex-col gap-2">
@@ -119,7 +121,7 @@ const handleFileUpload = async (files: FileList) => {
         </label>
       </nav>
 
-            {/* 2. MAIN CONTENT AREA */}
+      {/* MAIN CONTENT AREA */}
       <main className="flex-1 overflow-y-auto relative">
         {view === 'map' ? (
           <CinematicMap 
@@ -129,9 +131,15 @@ const handleFileUpload = async (files: FileList) => {
           />
         ) : selectedTrip ? (
           <div className="animate-in fade-in duration-500">
-            <button onClick={() => setSelectedTripId(null)} className="absolute top-8 left-8 z-20 p-2 bg-zinc-900 rounded-full"><ChevronLeft /></button>
-            <div className="h-[40vh] w-full relative bg-zinc-900 flex items-end p-12">
-               <h2 className="text-6xl font-serif font-bold">{selectedTrip.name}</h2>
+            <button onClick={() => setSelectedTripId(null)} className="absolute top-8 left-8 z-20 p-2 bg-zinc-900 rounded-full"
+              ><ChevronLeft />
+            </button>
+            <div className="h-[40vh] w-full relative bg-zinc-900">
+              <TripCover 
+                trip={selectedTrip} 
+                width={1200} 
+                className="w-full h-full" 
+              />
             </div>
             <div className="p-10">
               <PhotoGallery 
@@ -142,7 +150,7 @@ const handleFileUpload = async (files: FileList) => {
             </div>
           </div>
         ) : (
-          <div className="p-12">
+          <div className="p-4">
             <h2 className="text-3xl font-bold mb-4">Journeys</h2>
             <TripCards 
               trips={trips} 
@@ -155,7 +163,7 @@ const handleFileUpload = async (files: FileList) => {
         {isProcessing && (
           <div className="fixed inset-0 z-[100] bg-zinc-950/80 flex flex-col items-center justify-center backdrop-blur-sm">
             <div className="w-64 bg-zinc-900 border border-zinc-700 rounded-2xl p-6 shadow-2xl">
-              <h3 className="font-bold mb-2">Processing Photos...</h3>
+              <h3 className="font-bold mb-2">Uploading Photos...</h3>
               <div className="w-full bg-zinc-700 h-2 rounded-full overflow-hidden">
                 <div 
                   className="bg-amber-400 h-full transition-all duration-300" 
