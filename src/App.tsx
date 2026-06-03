@@ -109,7 +109,7 @@ const handleFileUpload = async (files: FileList) => {
       {isDragging && <div className="absolute inset-0 z-50 bg-amber-500/10 border-4 border-dashed border-amber-500 flex items-center justify-center pointer-events-none font-bold text-amber-500 text-xl">DROP TO UPLOAD</div>}
 
       {/* SIDE NAV */}
-      <nav className="w-64 border-r border-zinc-800/50 p-8 flex flex-col gap-12 z-20 bg-[#0a0c14]">
+      <nav className="hidden md:flex w-64 border-r border-zinc-800/50 p-8 flex flex-col gap-12 z-20 bg-[#0a0c14]">
         <h1 className="font-bold text-lg flex items-center gap-3"><div className="p-2 bg-amber-400 rounded-full"><Compass size={20}/></div>Photo Diary</h1>
         <div className="flex flex-col gap-2">
           <button onClick={() => setView('map')} className={`flex items-center gap-4 px-4 py-3 rounded-xl ${view === 'map' ? 'bg-zinc-800' : ''}`}><MapIcon size={18} /> Map</button>
@@ -120,6 +120,12 @@ const handleFileUpload = async (files: FileList) => {
           <input type="file" multiple className="hidden" onChange={(e) => e.target.files && handleFileUpload(e.target.files)} />
         </label>
       </nav>
+      {/* Mobile Bottom Bar: Only shows on mobile */}
+      <div className="md:hidden fixed bottom-0 w-full flex justify-around p-4 bg-zinc-900 z-50">
+        <button onClick={() => setView('map')}>Map</button>
+        <button onClick={() => setView('journeys')}>Journeys</button>
+        <label>Upload <input type="file" hidden /></label>
+      </div>
 
       {/* MAIN CONTENT AREA */}
       <main className="flex-1 overflow-y-auto relative">
@@ -134,7 +140,7 @@ const handleFileUpload = async (files: FileList) => {
             <button onClick={() => setSelectedTripId(null)} className="absolute top-8 left-8 z-20 p-2 bg-zinc-900 rounded-full"
               ><ChevronLeft />
             </button>
-            <div className="h-[40vh] w-full relative bg-zinc-900">
+            <div className="h-[25vh] md:h-[40vh] w-full relative bg-zinc-900">
               <TripCover 
                 trip={selectedTrip} 
                 width={1200} 
