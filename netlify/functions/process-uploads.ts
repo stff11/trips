@@ -77,6 +77,15 @@ export const handler: Handler = async (event: HandlerEvent): Promise<HandlerResp
           console.error(`Metadata parsing failed for ${item.name}:`, e);
           return {}; // Return empty to proceed
         });
+
+      const hasValidMetadata = metadata?.GPSLatitude && metadata?.DateTimeOriginal;
+
+      if (!hasValidMetadata) {
+        console.log(`Skipping: Metadata missing for ${item.name}.`);
+        // We return a 200 to the client to indicate we intentionally didn't process it, 
+        // or you could throw an error if you want to notify the user.
+        continue; 
+      }
       
       const cloudinaryResult = await new Promise<any>((resolve, reject) => {
         cloudinary.uploader.upload_stream({ folder: 'wanderlens' }, (err, res) => err ? reject(err) : resolve(res)).end(buffer);

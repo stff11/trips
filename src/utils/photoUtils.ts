@@ -5,7 +5,7 @@ export const getOptimizedCloudinaryUrl = (url: string, width: number = 600) => {
     return `${baseUrl}/upload/w_${width},c_fill,f_auto,q_auto/${path}`;
   };
   
-  export const getCoverUrl = (trip: any, width: number = 600) => {
+export const getCoverUrl = (trip: any, width: number = 600) => {
     // 1. Fallback if no cover photo logic exists
     const fallback = '/assets/fallback-image.jpeg';
     if (!trip?.coverPhotoId) return fallback;
@@ -17,6 +17,5 @@ export const getOptimizedCloudinaryUrl = (url: string, width: number = 600) => {
         return getOptimizedCloudinaryUrl(coverPhoto.cloudinaryUrl, width);
       }
     }
-  
     return fallback;
-  };
+ };
