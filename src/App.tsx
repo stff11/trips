@@ -38,39 +38,56 @@ export default function App() {
   const [progress, setProgress] = useState(0); // 0 to 100
   
 // Unified Drag/Upload Logic
-const handleFileUpload = async (files: FileList) => {
-  const fileArray = Array.from(files);
-  setIsDragging(false);
+const handleFileUpload = async (files: File[]) => {
   setIsProcessing(true);
+  setProgress(0);
 
-  const processFile = (file: File) => {
-    return new Promise<any>((resolve) => {
-      const reader = new FileReader();
-      reader.onload = (e) => resolve({ 
-        name: file.name, 
-        base64Data: (e.target?.result as string).split(',')[1],
-        type: file.type 
-      });
-      reader.readAsDataURL(file);
+  for (let i = 0; i < files.length; i++) {
+    const file = files[i];
+
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('tripId', selectedTrip?.id?.toString() || '');
+
+    // We use XMLHttpRequest instead of fetch to get upload progress
+    await new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      
+      xhr.open('POST', '/api/process-uploads');
+
+      xhr.upload.onprogress = (event) => {
+        if (event.lengthComputable) {
+          // Calculate overall progress based on files processed + current file progress
+          const currentFileProgress = (event.loaded / event.total) * 100;
+          const totalProgress = Math.round(
+            ((i / files.length) * 100) + (currentFileProgress / files.length)
+          );
+          setProgress(totalProgress);
+        }
+      };
+
+      xhr.onload = () => {
+        if (xhr.status === 200) 
+          resolve(xhr.response);
+        else if (xhr.status === 504) {
+          alert("The server is taking too long to process the location data. Trying again...");
+       } else 
+        reject(new Error(`Upload failed with status ${xhr.status}`));
+      };
+
+      xhr.onerror = () => reject(new Error("Network error"));
+      
+      xhr.send(formData);
     });
-  };
-
-  for (let i = 0; i < fileArray.length; i++) {
-    const converted = await processFile(fileArray[i]);
-
-    try {
-      // Send one by one
-      await fetch('/api/process-uploads', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ photos: [converted], tripId: selectedTrip?.id || null })
-      });
-      setProgress(Math.round(((i + 1) / fileArray.length) * 100));
-    } catch (err) {
-      console.error("Upload failed for:", fileArray[i].name);
-    }
   }
+
+  // Visual feedback: brief 100% state before finishing
+  setProgress(100);
+  await new Promise(r => setTimeout(r, 500));
+  
   setIsProcessing(false);
+  setProgress(0);
+  setIsDragging(false);
   await reloadData();
 };
 
@@ -103,7 +120,11 @@ const handleFileUpload = async (files: FileList) => {
       className="flex w-screen h-screen bg-[#0a0c14] text-zinc-100 font-sans"
       onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
       onDragLeave={() => setIsDragging(false)}
-      onDrop={(e) => { e.preventDefault(); handleFileUpload(e.dataTransfer.files); }}
+      onDrop={(e) => { 
+        e.preventDefault(); 
+        setIsDragging(false);
+        handleFileUpload(Array.from(e.dataTransfer.files)); 
+      }}
       onClick={() => setContextMenu(null)}
     >
       {isDragging && <div className="absolute inset-0 z-50 bg-amber-500/10 border-4 border-dashed border-amber-500 flex items-center justify-center pointer-events-none font-bold text-amber-500 text-xl">DROP TO UPLOAD</div>}
@@ -117,7 +138,10 @@ const handleFileUpload = async (files: FileList) => {
         </div>
         <label className="cursor-pointer bg-amber-400 hover:bg-zinc-700 text-white p-4 rounded-2xl flex items-center justify-center gap-2 font-bold text-xs">
           <Plus size={16} /> UPLOAD
-          <input type="file" multiple className="hidden" onChange={(e) => e.target.files && handleFileUpload(e.target.files)} />
+          <input 
+            type="file" 
+            multiple className="hidden" 
+            onChange={(e) => e.target.files && handleFileUpload(Array.from(e.target.files))} />
         </label>
       </nav>
       {/* Mobile Bottom Bar: Only shows on mobile */}

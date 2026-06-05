@@ -1,9 +1,10 @@
 // File: /netlify/functions/process-uploads.ts
 import { Handler, HandlerEvent, HandlerResponse } from '@netlify/functions';
+import Busboy from 'busboy';
 import { v2 as cloudinary } from 'cloudinary';
 import exifr from 'exifr';
 import { eq, asc } from 'drizzle-orm';
-import { db } from '../../src/db'; 
+import { db } from '../../src/db';
 import { photos, trips } from '../../src/db/schema';
 import crypto from 'crypto';
 
@@ -19,31 +20,21 @@ const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 // Robust coordinate conversion
 function toDecimal(val: any): number | null {
   if (typeof val === 'number') return val;
-  if (Array.isArray(val) && val.length >= 3) return val[0] + val[1] / 60 + val[2] / 3600;
+  if (Array.isArray(val) && val.length >= 3) return Number(val[0]) + Number(val[1]) / 60 + Number(val[2]) / 3600;
+  if (typeof val === 'string') return parseFloat(val);
   return null;
 }
 
-// Geocoding with throttling and localization
 async function getLocationName(lat: number, lng: number): Promise<string> {
   try {
-    const url = `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json&zoom=10&accept-language=en-GB`;
-    const res = await fetch(url, { headers: { 'User-Agent': 'WanderlensJournal/1.0' } });
-    if (!res.ok) return 'Spatial Sequence';
-    
-    const data: any = await res.json();
+    const res = await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json&accept-language=en-GB`, 
+      { headers: { 'User-Agent': 'WanderlensJournal/1.0' } });
+    const data = await res.json();
     const addr = data?.address;
-    if (!addr) return 'Spatial Sequence';
-
-    const place = addr.city ?? addr.town ?? addr.village ?? addr.county ?? addr.state;
-    const country = addr.country;
-    
-    return place && country ? `${place}, ${country}` : (country ?? 'Spatial Sequence');
-  } catch { return 'Spatial Sequence'; }
-}
-
-function formatTripTitle(locationName: string, date: Date): string {
-  const monthYear = date.toLocaleString('en-GB', { month: 'long', year: 'numeric' });
-  return `${locationName} (${monthYear})`;
+    if (!addr) return 'Unrecognised Location';
+    const place = addr.city ?? addr.town ?? addr.village ?? addr.state;
+    return place ? `${place}, ${addr.country ?? ''}` : (addr.country ?? 'Historical Domain');
+  } catch { return 'Unrecognised Location'; }
 }
 
 function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): number {
@@ -54,115 +45,105 @@ function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): nu
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
+// 1. Helper to wrap any async work with a timeout
+const withTimeout = <T>(promise: Promise<T>, label: string): Promise<T> => {
+  const TIME = 9000; // 9 seconds < Netlify's 10s limit
+  const timeout = new Promise<never>((_, reject) =>
+    setTimeout(() => reject(new Error(`Timeout: ${label} took longer than 9 seconds`)), TIME)
+  );
+  return Promise.race([promise, timeout]);
+};
+
 export const handler: Handler = async (event: HandlerEvent): Promise<HandlerResponse> => {
-  if (event.httpMethod !== 'POST') 
-    return { statusCode: 405, body: 'Method Not Allowed' };
+  const body = event.isBase64Encoded 
+    ? Buffer.from(event.body as string, 'base64') 
+    : Buffer.from(event.body as string, 'binary');
 
-  const { photos: incomingPhotos } = JSON.parse(event.body || '{}');
-    
-   // Process items one by one sequentially to prevent server overload
-  for (const item of incomingPhotos) {
-    try {
-      const buffer = Buffer.from(item.base64Data, 'base64');
-      const fileHash = crypto.createHash('md5').update(buffer).digest('hex');
+  const busboy = Busboy({ headers: event.headers });
 
-      const existing = await db.select().from(photos).where(eq(photos.fileHash, fileHash));
-      if (existing.length > 0) {
-        console.log(`Skipping duplicate: ${item.name}`);
-        return { statusCode: 200, body: 'Stop. Duplicate!'}; // Stop here, do not upload to Cloudinary
-      }
+  return new Promise((resolve) => {
+    let fileBuffer: Buffer | null = null;
+    let fileName: string = '';
+    let mimeType: string = '';
 
-      const metadata = await exifr.parse(buffer, ['GPSLatitude', 'GPSLongitude', 'DateTimeOriginal'])
-        .catch((e) => {
-          console.error(`Metadata parsing failed for ${item.name}:`, e);
-          return {}; // Return empty to proceed
+    busboy.on('file', (fieldname, file, info) => {
+      fileName = info.filename;
+      mimeType = info.mimeType;
+      const chunks: Buffer[] = [];
+      file.on('data', (chunk) => chunks.push(chunk));
+      file.on('end', () => { fileBuffer = Buffer.concat(chunks); });
+    });
+
+    busboy.on('finish', async () => {
+      if (!fileBuffer) return resolve({ statusCode: 400, body: 'No file provided' });
+
+      try {
+        await withTimeout(
+          (async () => {
+        const fileHash = crypto.createHash('md5').update(fileBuffer).digest('hex');
+        const existing = await db.select().from(photos).where(eq(photos.fileHash, fileHash));
+        if (existing.length > 0) return resolve({ statusCode: 200, body: 'Duplicate' });
+
+        const metadata = await exifr.parse(fileBuffer, { tiff: true, xmp: true, iptc: true, reviveValues: true }).catch(() => ({}));
+        const lat = toDecimal(metadata?.GPSLatitude) ?? (typeof metadata?.latitude === 'number' ? metadata.latitude : null);
+        const lng = toDecimal(metadata?.GPSLongitude) ?? (typeof metadata?.longitude === 'number' ? metadata.longitude : null);
+        const takenAt = metadata?.DateTimeOriginal ? new Date(metadata.DateTimeOriginal) : new Date();
+
+        const cloudinaryResult = await new Promise<any>((res, rej) => {
+          cloudinary.uploader.upload_stream({ folder: 'wanderlens', transformation: [] }, (err, result) => err ? rej(err) : res(result)).end(fileBuffer);
         });
 
-      const hasValidMetadata = metadata?.GPSLatitude && metadata?.DateTimeOriginal;
+        const existingTrips = await db.select().from(trips).orderBy(asc(trips.startDate));
+        let targetTripId: number | null = null;
 
-      if (!hasValidMetadata) {
-        console.log(`Skipping: Metadata missing for ${item.name}.`);
-        // We return a 200 to the client to indicate we intentionally didn't process it, 
-        // or you could throw an error if you want to notify the user.
-        continue; 
-      }
-      
-      const cloudinaryResult = await new Promise<any>((resolve, reject) => {
-        cloudinary.uploader.upload_stream({ folder: 'wanderlens' }, (err, res) => err ? reject(err) : resolve(res)).end(buffer);
-      });
-
-      const lat = toDecimal(metadata?.GPSLatitude);
-      const lng = toDecimal(metadata?.GPSLongitude);
-      const takenAt = metadata?.DateTimeOriginal ? new Date(metadata.DateTimeOriginal) : new Date();
-
-      const existingTrips = await db.select().from(trips).orderBy(asc(trips.startDate));
-      let targetTripId: number | null = null;
-
-      for (const trip of existingTrips) {
-        if (!trip.centerLat || !trip.centerLng || lat === null || lng === null) continue;
-        
-        const distOk = haversineKm(lat, lng, Number(trip.centerLat), Number(trip.centerLng)) <= 100;
-        const tripStart = new Date(trip.startDate);
-        const tripEnd = new Date(trip.endDate);
-        const isWithinTimeWindow = (takenAt.getTime() >= tripStart.getTime() - 5 * 86400000) && 
-                                   (takenAt.getTime() <= tripEnd.getTime() + 5 * 86400000);
-
-        if (distOk && isWithinTimeWindow) {
-          targetTripId = trip.id;
-          await db.update(trips).set({ 
-            startDate: takenAt < tripStart ? takenAt : tripStart,
-            endDate: takenAt > tripEnd ? takenAt : tripEnd,
-            photoCount: trip.photoCount + 1 
-          }).where(eq(trips.id, trip.id));
-          break;
+        for (const trip of existingTrips) {
+          if (!trip.centerLat || !trip.centerLng || lat === null || lng === null) continue;
+          if (haversineKm(lat, lng, Number(trip.centerLat), Number(trip.centerLng)) <= 100) {
+            targetTripId = trip.id;
+            await db.update(trips).set({ 
+              startDate: takenAt < new Date(trip.startDate) ? takenAt : new Date(trip.startDate),
+              photoCount: (trip.photoCount || 0) + 1 
+            }).where(eq(trips.id, trip.id));
+            break;
+          }
         }
-      }
 
-      if (!targetTripId) {
-        // IMPORTANT: Add delay to respect Nominatim API terms
-        await sleep(1100); 
-        const locationName = lat && lng ? await getLocationName(lat, lng) : 'Historical Domain';
-        const tripName = formatTripTitle(locationName, takenAt);
-        
-        const [newTrip] = await db.insert(trips).values({
-          name: tripName,
-          startDate: takenAt,
-          endDate: takenAt,
-          locationName,
-          centerLat: lat?.toString(),
-          centerLng: lng?.toString(),
-          photoCount: 1
-        } as any).returning({ id: trips.id });
-        targetTripId = newTrip.id;
-      }
+        if (!targetTripId) {
+          await sleep(1100);
+          const locationName = lat && lng ? await getLocationName(lat, lng) : 'Unknown Location';
+          const [newTrip] = await db.insert(trips).values({
+            name: `${locationName} (${takenAt.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' })})`,
+            startDate: takenAt, endDate: takenAt, locationName,
+            centerLat: lat?.toString(), centerLng: lng?.toString(), photoCount: 1
+          } as any).returning({ id: trips.id });
+          targetTripId = newTrip.id;
+        }
 
-      const [newPhoto] = await db.insert(photos).values({
-        tripId: targetTripId,
-        fileHash,
-        filename: item.name,
-        originalName: item.name,
-        cloudinaryUrl: cloudinaryResult.secure_url,
-        cloudinaryPublicId: cloudinaryResult.cloudinary_public_id || cloudinaryResult.public_id,
-        mimeType: item.type || 'image/jpeg',
-        lat: lat?.toString(),
-        lng: lng?.toString(),
-        takenAt
-      } as any).returning({ id: photos.id });
+        const [newPhoto] = await db.insert(photos).values({
+          tripId: targetTripId, fileHash, filename: fileName, originalName: fileName,
+          cloudinaryUrl: cloudinaryResult.secure_url, cloudinaryPublicId: cloudinaryResult.public_id,
+          mimeType, lat: lat?.toString(), lng: lng?.toString(), takenAt
+        } as any).returning({ id: photos.id });
+        if (newPhoto) {
+          const [trip] = await db.select().from(trips).where(eq(trips.id, targetTripId!));
+          if (trip && !trip.coverPhotoId) {
+              await db.update(trips).set({ coverPhotoId: newPhoto.id }).where(eq(trips.id, targetTripId!));
+          }
+        }
+      })(), 
+      "File Processing"
+      );
 
-      const [trip] = await db.select().from(trips).where(eq(trips.id, targetTripId));
-      if (!trip.coverPhotoId) {
-        await db.update(trips).set({ coverPhotoId: newPhoto.id }).where(eq(trips.id, targetTripId));
+        resolve({ statusCode: 200, body: JSON.stringify({ success: true }) });
+      } catch (err) {
+        console.error("CRITICAL ERROR:", err);
+        // If it's a timeout, return a specific status code
+        const statusCode = (err as Error).message.includes('Timeout') ? 504 : 500;
+        resolve({ statusCode, body: JSON.stringify({ error: (err as Error).message }) });
       }
-    } catch (err) {
-      // Force the error to print clearly
-      console.error("CRITICAL: Failed to process photo:", item.name);
-      console.error("Full error details:", err);
-      // Do NOT continue silently; return the error to the client
-      return { 
-        statusCode: 500, 
-        body: JSON.stringify({ error: `Failed to save ${item.name}: ${(err as Error).message}` }) 
-      }
-    }
-  }
-return { statusCode: 200, body: JSON.stringify({ success: true }) };
+    });
+
+    busboy.write(body);
+    busboy.end();
+  });
 };

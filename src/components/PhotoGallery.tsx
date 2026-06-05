@@ -1,5 +1,6 @@
 // File: /src/components/PhotoGallery.tsx
 import { Maximize2 } from 'lucide-react';
+import { getOptimizedCloudinaryUrl } from '../utils/photoUtils'; 
 
 export default function PhotoGallery({ photos, onPhotoClick, onContextMenu }: any) {
   if (!photos || photos.length === 0) return null;
@@ -14,10 +15,11 @@ export default function PhotoGallery({ photos, onPhotoClick, onContextMenu }: an
           className="group relative aspect-square bg-zinc-900 rounded-xl overflow-hidden cursor-pointer"
         >
           <img 
-            src={photo.cloudinaryUrl || photo.filePath} 
+            src={getOptimizedCloudinaryUrl(photo.cloudinaryUrl, 'auto')} 
             className="w-full h-full object-cover group-hover:scale-105 transition-transform" 
+            alt="Trip photo"
           />
-          {/* Overlay to trigger the context menu visual */}
+          
           <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
             <Maximize2 className="text-white drop-shadow-md" size={24} />
           </div>

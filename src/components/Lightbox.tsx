@@ -1,5 +1,6 @@
 // File: /src/components/Lightbox.tsx
 import { X, ChevronLeft, ChevronRight } from 'lucide-react';
+import { getOptimizedCloudinaryUrl } from '../utils/photoUtils'; 
 
 export default function Lightbox({ photos, activeIndex, onClose, onPrev, onNext }: any) {
   const photo = photos[activeIndex];
@@ -18,7 +19,7 @@ export default function Lightbox({ photos, activeIndex, onClose, onPrev, onNext 
     }
     return (
       <img 
-        src={item.cloudinaryUrl || item.filePath} 
+      src={getOptimizedCloudinaryUrl(item.cloudinaryUrl, 'auto')} 
         className="max-w-[100vw] max-h-[100vh] object-contain" 
         alt="Full screen view"
       />
