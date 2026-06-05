@@ -95,10 +95,29 @@ const handleFileUpload = async (files: File[]) => {
     setContextMenu(null);
     if (action === 'delete') {
       if (!window.confirm(`Delete this ${type}?`)) return;
-      const body = type === 'photo' ? { photoId: id, cloudinaryPublicId: extra?.publicId } : { action: 'DELETE', tripId: id };
-      await fetch(type === 'photo' ? '/api/delete-photo' : '/api/manage-trip', { 
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) 
+
+      const isPhoto = type === 'photo';
+      const body = isPhoto
+        ? { photoId: id, tripId: extra?.tripId } 
+        : { action: 'DELETE', tripId: id };
+
+      const url = isPhoto 
+        ? '/api/delete-photo' 
+        : '/api/manage-trip';
+  
+      console.log("PAYLOAD BEING SENT:", JSON.stringify(body, null, 2));
+      
+      const response = await fetch(url, { 
+        method: 'POST', 
+        headers: { 'Content-Type': 'application/json' }, 
+        body: JSON.stringify(body) 
       });
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error("SERVER REJECTED REQUEST:", errorText);
+        alert(`Error: ${errorText}`);
+        return;
+      }
       if (type === 'trip') setSelectedTripId(null);
     } else if (action === 'edit') {
       const newName = window.prompt("Enter new title:", extra?.currentName);
@@ -213,7 +232,12 @@ const handleFileUpload = async (files: File[]) => {
             tripId={contextMenu.type === 'trip' ? contextMenu.id : selectedTrip?.id}
             photoId={contextMenu.type === 'photo' ? contextMenu.id : undefined}
             onDeleteTrip={(id) => handleAction('delete', 'trip', id)}
-            onDeletePhoto={(id) => handleAction('delete', 'photo', id, contextMenu.extra)}
+            onDeletePhoto={
+              (id) => handleAction('delete', 'photo', id, { 
+                ...contextMenu.extra, 
+                tripId: selectedTrip?.id 
+              })
+            }
             onEditName={(id) => handleAction('edit', 'trip', id, contextMenu.extra)}
             onSetCover={(id) => handleAction('cover', 'photo', id, { tripId: selectedTrip?.id })}
           />

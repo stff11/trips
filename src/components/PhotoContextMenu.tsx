@@ -1,7 +1,7 @@
 // components/PhotoContextMenu.tsx
 interface PhotoContextMenuProps {
   onDeleteTrip?: (tripId: number) => void;
-  onDeletePhoto?: (photoId: number) => void; 
+  onDeletePhoto?: (photoId: number,tripId: number) => void; 
   onEditName?: (tripId: number) => void;
   onSetCover?: (photoId: number) => void;
   tripId: number;
@@ -25,7 +25,7 @@ export const PhotoContextMenu = ({
           <button onClick={() => onSetCover?.(photoId)} className="block w-full text-left px-4 py-2 hover:bg-zinc-100 text-xs text-zinc-700">
             Set as Album Cover
           </button>
-          <button onClick={() => onDeletePhoto?.(photoId)} className="block w-full text-left px-4 py-2 hover:bg-zinc-100 text-xs text-red-600">
+          <button onClick={() => onDeletePhoto?.(photoId, tripId)} className="block w-full text-left px-4 py-2 hover:bg-zinc-100 text-xs text-red-600">
             Delete Photo
           </button>
           <div className="h-px bg-zinc-200 my-1" />
