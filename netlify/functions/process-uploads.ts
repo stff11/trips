@@ -98,12 +98,33 @@ export const handler: Handler = async (event: HandlerEvent): Promise<HandlerResp
 
         for (const trip of existingTrips) {
           if (!trip.centerLat || !trip.centerLng || lat === null || lng === null) continue;
-          if (haversineKm(lat, lng, Number(trip.centerLat), Number(trip.centerLng)) <= 100) {
+          
+          // 1. Geography Check (100km radius)
+          const distOk = haversineKm(lat, lng, Number(trip.centerLat), Number(trip.centerLng)) <= 100;
+          
+          // 2. The "5 Day Gap" Window (The logic you were missing!)
+          const tripStart = new Date(trip.startDate);
+          const tripEnd = new Date(trip.endDate);
+          
+          // 5 days in milliseconds = 5 * 24 * 60 * 60 * 1000 = 432,000,000ms
+          const FIVE_DAYS_MS = 432000000;
+          
+          const isWithinTimeWindow = (takenAt.getTime() >= tripStart.getTime() - FIVE_DAYS_MS) && 
+                                     (takenAt.getTime() <= tripEnd.getTime() + FIVE_DAYS_MS);
+        
+          if (distOk && isWithinTimeWindow) {
             targetTripId = trip.id;
+            
+            // Update the trip boundaries if this photo expands them
+            const newStartDate = takenAt < tripStart ? takenAt : tripStart;
+            const newEndDate = takenAt > tripEnd ? takenAt : tripEnd;
+            
             await db.update(trips).set({ 
-              startDate: takenAt < new Date(trip.startDate) ? takenAt : new Date(trip.startDate),
+              startDate: newStartDate,
+              endDate: newEndDate,
               photoCount: (trip.photoCount || 0) + 1 
             }).where(eq(trips.id, trip.id));
+            
             break;
           }
         }
