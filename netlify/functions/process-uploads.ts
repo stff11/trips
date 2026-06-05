@@ -66,7 +66,7 @@ export const handler: Handler = async (event: HandlerEvent): Promise<HandlerResp
     let fileName: string = '';
     let mimeType: string = '';
 
-    busboy.on('file', (fieldname, file, info) => {
+    busboy.on('file', (_fieldname, file, info) => {
       fileName = info.filename;
       mimeType = info.mimeType;
       const chunks: Buffer[] = [];
