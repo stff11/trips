@@ -2,7 +2,7 @@ import { Handler } from '@netlify/functions';
 import { v2 as cloudinary } from 'cloudinary'; 
 import { db } from '../../src/db';
 import { photos, trips } from '../../src/db/schema';
-import { eq, sql } from 'drizzle-orm';
+import { eq, count } from 'drizzle-orm';
 
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
@@ -21,46 +21,51 @@ export const handler: Handler = async (event) => {
   if (!photoId || !tripId) return { statusCode: 400, body: 'Missing ID' };
 
   try {
-    // 1. Fetch the photo record first so we have the Public ID
     const [photoToDelete] = await db.select().from(photos).where(eq(photos.id, Number(photoId)));
     if (!photoToDelete) throw new Error("Photo not found");
 
-    // 2. Perform the database operations inside a transaction
     await db.transaction(async (tx) => {
-      const [trip] = await tx.select().from(trips).where(eq(trips.id, Number(tripId)));
-      if (!trip) throw new Error("Trip not found");
-
-      const remainingPhotos = await tx.select().from(photos)
-        .where(sql`${photos.tripId} = ${tripId} AND ${photos.id} != ${photoId}`);
-
-      const newCount = Math.max(0, (trip.photoCount || 1) - 1);
-      const updates: any = { photoCount: newCount };
-
-      // If deleting the cover photo, set the first one as cover
-      if (trip.coverPhotoId === Number(photoId)) {
-        updates.coverPhotoId = remainingPhotos.length > 0 ? remainingPhotos[0].id : null;
-      }
-
-      if (remainingPhotos.length > 0) {
-        const dates = remainingPhotos
-          .filter((p): p is typeof p & { takenAt: Date } => p.takenAt !== null)
-          .map(p => new Date(p.takenAt).getTime());
-        updates.startDate = new Date(Math.min(...dates));
-        updates.endDate = new Date(Math.max(...dates));
-      }
-
-      await tx.update(trips).set(updates).where(eq(trips.id, Number(tripId)));
+      // 1. Delete the photo
       await tx.delete(photos).where(eq(photos.id, Number(photoId)));
       
-      // If deleting the last photo, delete the album too
+      // 2. Get the new accurate count
+      const [result] = await tx.select({ value: count() })
+        .from(photos)
+        .where(eq(photos.tripId, Number(tripId)));
+
+      const newCount = result.value;
+
       if (newCount === 0) {
+        // 3a. If empty, delete the trip
         await tx.delete(trips).where(eq(trips.id, Number(tripId)));
+      } else {
+        // 3b. Otherwise, update the count and metadata
+        const remainingPhotos = await tx.select().from(photos)
+          .where(eq(photos.tripId, Number(tripId)));
+        
+        const updates: any = { photoCount: newCount };
+
+        // Handle cover photo logic if necessary
+        const [trip] = await tx.select().from(trips).where(eq(trips.id, Number(tripId)));
+        if (trip.coverPhotoId === Number(photoId)) {
+          updates.coverPhotoId = remainingPhotos[0].id;
+        }
+
+        // Update dates
+        const dates = remainingPhotos
+          .filter((p) => p.takenAt !== null)
+          .map(p => new Date(p.takenAt!).getTime());
+        
+        if (dates.length > 0) {
+          updates.startDate = new Date(Math.min(...dates));
+          updates.endDate = new Date(Math.max(...dates));
+        }
+
+        await tx.update(trips).set(updates).where(eq(trips.id, Number(tripId)));
       }
     });
 
-    // 3. FINALLY: Delete from Cloudinary
-    // We do this AFTER the DB transaction succeeds. If it fails, 
-    // the photo stays in DB and in Cloudinary (Consistency).
+    // 4. Delete from Cloudinary only after DB succeeds
     if (photoToDelete.cloudinaryPublicId) {
       await cloudinary.uploader.destroy(photoToDelete.cloudinaryPublicId);
     }
