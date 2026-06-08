@@ -1,5 +1,3 @@
-// File: /src/components/TripCards.tsx
-import React from "react";
 import TripCover from "./TripCover";
 
 interface TripCardsProps {

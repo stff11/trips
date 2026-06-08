@@ -1,4 +1,3 @@
-// File: /src/components/Lightbox.tsx
 import { X, ChevronLeft, ChevronRight } from 'lucide-react';
 import { getOptimizedCloudinaryUrl } from '../utils/photoUtils'; 
 

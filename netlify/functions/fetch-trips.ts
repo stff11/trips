@@ -1,4 +1,3 @@
-// 📁 File: /netlify/functions/fetch-trips.ts
 import { Handler } from '@netlify/functions';
 import { neon } from '@neondatabase/serverless';
 import { drizzle } from 'drizzle-orm/neon-http';
@@ -8,7 +7,7 @@ import * as schema from '../../src/db/schema';
 const sql = neon(process.env.DATABASE_URL!);
 const db = drizzle(sql, { schema });
 
-// 🌟 Make headers explicit and uniform to satisfy the Netlify type engine
+// Make headers explicit and uniform to satisfy the Netlify type engine
 const corsHeaders = {
   'Content-Type': 'application/json',
   'Access-Control-Allow-Origin': '*',

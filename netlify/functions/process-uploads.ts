@@ -1,4 +1,3 @@
-// File: /netlify/functions/process-uploads.ts
 import { Handler, HandlerEvent, HandlerResponse } from '@netlify/functions';
 import Busboy from 'busboy';
 import { v2 as cloudinary } from 'cloudinary';
@@ -45,7 +44,7 @@ function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): nu
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
-// 1. Helper to wrap any async work with a timeout
+// Helper to wrap any async work with a timeout
 const withTimeout = <T>(promise: Promise<T>, label: string): Promise<T> => {
   const TIME = 9000; // 9 seconds < Netlify's 10s limit
   const timeout = new Promise<never>((_, reject) =>
@@ -99,14 +98,14 @@ export const handler: Handler = async (event: HandlerEvent): Promise<HandlerResp
         for (const trip of existingTrips) {
           if (!trip.centerLat || !trip.centerLng || lat === null || lng === null) continue;
           
-          // 1. Geography Check (100km radius)
+          // Geography Check (100km radius)
           const distOk = haversineKm(lat, lng, Number(trip.centerLat), Number(trip.centerLng)) <= 100;
           
-          // 2. The "5 Day Gap" Window (The logic you were missing!)
+          // Time check (5 Day Gap Window)
           const tripStart = new Date(trip.startDate);
           const tripEnd = new Date(trip.endDate);
           
-          // 5 days in milliseconds = 5 * 24 * 60 * 60 * 1000 = 432,000,000ms
+          // (5 days in milliseconds = 5 * 24 * 60 * 60 * 1000 = 432,000,000ms)
           const FIVE_DAYS_MS = 432000000;
           
           const isWithinTimeWindow = (takenAt.getTime() >= tripStart.getTime() - FIVE_DAYS_MS) && 

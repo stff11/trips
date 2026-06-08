@@ -1,4 +1,3 @@
-// File: /src/components/PhotoGallery.tsx
 import { Maximize2 } from 'lucide-react';
 import { getOptimizedCloudinaryUrl } from '../utils/photoUtils'; 
 

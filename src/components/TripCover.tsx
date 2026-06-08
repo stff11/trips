@@ -1,4 +1,3 @@
-// File: /src/components/TripCover.tsx
 import { Calendar, MapPin } from 'lucide-react';
 import { getCoverUrl } from '../utils/photoUtils';
 

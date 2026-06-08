@@ -1,5 +1,3 @@
-// File: /src/utils/photoUtils.ts
-
 // Define a type for the width argument
 type CloudinaryWidth = number | 'auto';
 export const getOptimizedCloudinaryUrl = (url: string, width: CloudinaryWidth = 'auto') => {

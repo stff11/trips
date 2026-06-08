@@ -1,4 +1,3 @@
-// File: /netlify/functions/manage-trip.ts
 import { Handler, HandlerEvent } from '@netlify/functions';
 import { v2 as cloudinary } from 'cloudinary';
 import { db } from '../../src/db';

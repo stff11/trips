@@ -1,4 +1,3 @@
-// components/PhotoContextMenu.tsx
 interface PhotoContextMenuProps {
   onDeleteTrip?: (tripId: number) => void;
   onDeletePhoto?: (photoId: number,tripId: number) => void; 

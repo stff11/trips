@@ -1,11 +1,9 @@
-// File: /netlify/functions/delete-photo.ts
 import { Handler } from '@netlify/functions';
-import { v2 as cloudinary } from 'cloudinary'; // Import cloudinary
+import { v2 as cloudinary } from 'cloudinary'; 
 import { db } from '../../src/db';
 import { photos, trips } from '../../src/db/schema';
 import { eq, sql } from 'drizzle-orm';
 
-// Ensure your cloudinary is configured here as well
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
   api_key: process.env.CLOUDINARY_API_KEY,
