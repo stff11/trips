@@ -3,8 +3,9 @@ interface PhotoContextMenuProps {
   onDeletePhoto?: (photoId: number,tripId: number) => void; 
   onEditName?: (tripId: number) => void;
   onSetCover?: (photoId: number) => void;
+  onMerge?: (tripId: number) => void;
   tripId: number;
-  photoId?: number; // Optional, only needed if acting on a specific photo
+  photoId?: number;
 }
 
 export const PhotoContextMenu = ({ 
@@ -12,6 +13,7 @@ export const PhotoContextMenu = ({
   onDeletePhoto,
   onEditName,
   onSetCover,
+  onMerge,
   tripId,
   photoId
 }: PhotoContextMenuProps) => {
@@ -34,6 +36,9 @@ export const PhotoContextMenu = ({
       {/* Album Actions */}
       <button onClick={() => onEditName?.(tripId)} className="block w-full text-left px-4 py-2 hover:bg-zinc-100 text-xs text-zinc-700">
         Edit Album Name
+      </button>
+      <button onClick={() => onMerge?.(tripId)} className="block w-full text-left px-4 py-2 hover:bg-zinc-100 text-xs text-zinc-700">
+        Merge into Album...
       </button>
       <button onClick={() => onDeleteTrip?.(tripId)} className="block w-full text-left px-4 py-2 hover:bg-zinc-100 text-xs text-red-600">
         Delete Entire Album

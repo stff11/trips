@@ -5,6 +5,8 @@ import PhotoGallery from './components/PhotoGallery';
 import Lightbox from './components/Lightbox';
 import { PhotoContextMenu } from './components/PhotoContextMenu';
 import TripCover from './components/TripCover';
+import { MergeModal } from './components/MergeModal';
+import { Trip } from './types';
 import { Compass, Map as MapIcon, ChevronLeft, Plus } from 'lucide-react';
 import './index.css';
 
@@ -15,6 +17,17 @@ export default function App() {
   const [isDragging, setIsDragging] = useState(false);
   const [contextMenu, setContextMenu] = useState<any>(null);
   const [lightbox, setLightbox] = useState({ open: false, index: 0, photos: [] as any[] });
+  const [mergingTrip, setMergingTrip] = useState<Trip | null>(null);
+
+  const handleMerge = async (sourceId: number, targetId: number) => {
+    await fetch('/api/merge-trips', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sourceTripId: sourceId, targetTripId: targetId }),
+    });
+    setMergingTrip(null);
+    await reloadData();
+  };
 
   const reloadData = async () => {
     try {
@@ -240,9 +253,24 @@ const handleFileUpload = async (files: File[]) => {
             }
             onEditName={(id) => handleAction('edit', 'trip', id, contextMenu.extra)}
             onSetCover={(id) => handleAction('cover', 'photo', id, { tripId: selectedTrip?.id })}
+            onMerge={(id) => {
+              const tripToMerge = trips.find(t => t.id === id);
+              if (tripToMerge) setMergingTrip(tripToMerge);
+            }}
           />
         </div>
       )}
+            
+      {/* Merge Trips */}
+      {mergingTrip && (
+        <MergeModal 
+          trips={trips} 
+          sourceTrip={mergingTrip} 
+          onClose={() => setMergingTrip(null)}
+          onConfirm={(targetId) => handleMerge(mergingTrip.id, targetId)}
+        />
+      )}
+
       {lightbox.open && 
       <Lightbox 
         photos={lightbox.photos} 

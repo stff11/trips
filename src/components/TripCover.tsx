@@ -22,7 +22,7 @@ export default function TripCover({ trip, width = 600, className = "" }: TripCov
 
       {/* 3. Content Overlay */}
       <div className="absolute bottom-0 p-6 w-full text-left">
-        <h3 className="text-2xl font-serif text-white">{trip.name}</h3>
+        <h3 className="text-xl font-serif text-white">{trip.name}</h3>
         
         <div className="flex flex-col gap-1 mt-2">
           <span className="text-zinc-300 text-xs font-medium uppercase tracking-wider flex items-center gap-1">
