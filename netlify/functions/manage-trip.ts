@@ -1,8 +1,16 @@
-import { Handler, HandlerEvent } from '@netlify/functions';
-import { v2 as cloudinary } from 'cloudinary';
-import { db } from '../../src/db';
-import { photos, trips } from '../../src/db/schema';
-import { eq } from 'drizzle-orm';
+import { Handler, HandlerEvent } from "@netlify/functions";
+import { v2 as cloudinary } from "cloudinary";
+import { neon } from "@neondatabase/serverless";
+import { drizzle } from "drizzle-orm/neon-http";
+import * as schema from "../../src/db/schema";
+import { photos, trips } from "../../src/db/schema";
+import { eq } from "drizzle-orm";
+
+const sql = neon(process.env.DATABASE_URL!);
+const db = drizzle(sql, { schema });
+
+
+
 
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
@@ -10,7 +18,9 @@ cloudinary.config({
   api_secret: process.env.CLOUDINARY_API_SECRET,
 });
 
-// Define the shape of our incoming request body
+// Cloudinary's bulk delete endpoint accepts up to 100 public IDs per call.
+const CLOUDINARY_BATCH_SIZE = 100;
+
 interface RequestBody {
   action: 'EDIT' | 'DELETE' | 'SET_COVER';
   tripId: string | number;
@@ -28,29 +38,44 @@ export const handler: Handler = async (event: HandlerEvent) => {
   try {
     if (action === 'EDIT') {
       if (!newName) return { statusCode: 400, body: 'Missing newName' };
-      await db.update(trips).set({ name: newName }).where(eq(trips.id, targetId));
-      
+      await db
+        .update(trips)
+        .set({ name: newName, updatedAt: new Date() })
+        .where(eq(trips.id, targetId));
+
     } else if (action === 'SET_COVER') {
       if (!photoId) return { statusCode: 400, body: 'Missing photoId' };
-      await db.update(trips).set({ coverPhotoId: photoId }).where(eq(trips.id, targetId));
-    } else if (action === 'DELETE') {
-      // 1. Fetch all photos for this trip so we have their public IDs
-      const tripPhotos = await db.select().from(photos).where(eq(photos.tripId, targetId));
+      await db
+        .update(trips)
+        .set({ coverPhotoId: photoId, updatedAt: new Date() })
+        .where(eq(trips.id, targetId));
 
-      // 2. Delete each photo from Cloudinary
-      for (const photo of tripPhotos) {
-        if (photo.cloudinaryPublicId) {
-          try {
-            await cloudinary.uploader.destroy(photo.cloudinaryPublicId);
-            console.log(`Deleted from Cloudinary: ${photo.cloudinaryPublicId}`);
-          } catch (err) {
-            console.error(`Failed to delete ${photo.cloudinaryPublicId} from Cloudinary`, err);
-          }
+    } else if (action === 'DELETE') {
+      // 1. Collect Cloudinary public IDs before removing anything from the DB
+      const tripPhotos = await db
+        .select({ cloudinaryPublicId: photos.cloudinaryPublicId })
+        .from(photos)
+        .where(eq(photos.tripId, targetId));
+
+      const publicIds = tripPhotos
+        .map((p) => p.cloudinaryPublicId)
+        .filter(Boolean) as string[];
+
+      // 2. Delete the trip — the `onDelete: 'cascade'` FK removes photo rows automatically
+      await db.delete(trips).where(eq(trips.id, targetId));
+
+      // 3. Bulk-delete from Cloudinary in batches of 100 (best-effort, after DB succeeds)
+      //    A single `delete_resources` call for 100 IDs takes ~1-2 s vs 100 s serially.
+      for (let i = 0; i < publicIds.length; i += CLOUDINARY_BATCH_SIZE) {
+        const batch = publicIds.slice(i, i + CLOUDINARY_BATCH_SIZE);
+        try {
+          await cloudinary.api.delete_resources(batch);
+        } catch (err) {
+          // Log but don't fail — DB is already clean; orphaned Cloudinary assets can be
+          // swept up later with a scheduled cleanup job.
+          console.error(`Cloudinary bulk delete failed for batch starting at ${i}:`, err);
         }
       }
-      // 3. Delete the trip from DB 
-      // (The 'onDelete: cascade' will now automatically delete the records in the 'photos' table)
-      await db.delete(trips).where(eq(trips.id, targetId));
     }
 
     return {
@@ -59,10 +84,10 @@ export const handler: Handler = async (event: HandlerEvent) => {
       body: JSON.stringify({ success: true }),
     };
   } catch (err) {
-    console.error("DEBUG ERROR:", err); // CHECK NETLIFY LOGS FOR THIS
-    return { 
-      statusCode: 500, 
-      body: JSON.stringify({ error: (err as Error).message }) 
+    console.error('manage-trip error:', err);
+    return {
+      statusCode: 500,
+      body: JSON.stringify({ error: (err as Error).message }),
     };
   }
 };

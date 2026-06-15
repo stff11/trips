@@ -1,8 +1,16 @@
-import { Handler } from '@netlify/functions';
-import { v2 as cloudinary } from 'cloudinary'; 
-import { db } from '../../src/db';
-import { photos, trips } from '../../src/db/schema';
-import { eq, count } from 'drizzle-orm';
+import { Handler } from "@netlify/functions";
+import { neon } from "@neondatabase/serverless";
+import { drizzle } from "drizzle-orm/neon-http";
+import * as schema from "../../src/db/schema";
+import { photos, trips } from "../../src/db/schema";
+import { eq, count } from "drizzle-orm";
+import { v2 as cloudinary } from "cloudinary";
+
+const sql = neon(process.env.DATABASE_URL!);
+const db = drizzle(sql, { schema });
+
+
+
 
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
