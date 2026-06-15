@@ -6,11 +6,9 @@ import { photos, trips } from "../../src/db/schema";
 import { eq, count } from "drizzle-orm";
 import { v2 as cloudinary } from "cloudinary";
 
+// neon-http doesn't support transactions — steps run sequentially.
 const sql = neon(process.env.DATABASE_URL!);
 const db = drizzle(sql, { schema });
-
-
-
 
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
@@ -19,68 +17,63 @@ cloudinary.config({
 });
 
 export const handler: Handler = async (event) => {
-  console.log("RAW EVENT BODY RECEIVED:", event.body);
+  const { photoId, tripId } = event.body ? JSON.parse(event.body) : {};
+  if (!photoId || !tripId) return { statusCode: 400, body: JSON.stringify({ error: 'Missing photoId or tripId' }) };
 
-  const body = event.body ? JSON.parse(event.body) : {};
-  console.log("PARSED BODY OBJECT:", body);
-
-  const { photoId, tripId } = body;
-  
-  if (!photoId || !tripId) return { statusCode: 400, body: 'Missing ID' };
+  const pid = Number(photoId);
+  const tid = Number(tripId);
 
   try {
-    const [photoToDelete] = await db.select().from(photos).where(eq(photos.id, Number(photoId)));
-    if (!photoToDelete) throw new Error("Photo not found");
+    // 1. Fetch the photo before deleting so we have the Cloudinary ID
+    const [photoToDelete] = await db.select().from(photos).where(eq(photos.id, pid));
+    if (!photoToDelete) return { statusCode: 404, body: JSON.stringify({ error: 'Photo not found' }) };
 
-    await db.transaction(async (tx) => {
-      // 1. Delete the photo
-      await tx.delete(photos).where(eq(photos.id, Number(photoId)));
-      
-      // 2. Get the new accurate count
-      const [result] = await tx.select({ value: count() })
-        .from(photos)
-        .where(eq(photos.tripId, Number(tripId)));
+    // 2. Delete the photo row
+    await db.delete(photos).where(eq(photos.id, pid));
 
-      const newCount = result.value;
+    // 3. Count remaining photos in the trip
+    const [{ value: newCount }] = await db.select({ value: count() }).from(photos).where(eq(photos.tripId, tid));
 
-      if (newCount === 0) {
-        // 3a. If empty, delete the trip
-        await tx.delete(trips).where(eq(trips.id, Number(tripId)));
-      } else {
-        // 3b. Otherwise, update the count and metadata
-        const remainingPhotos = await tx.select().from(photos)
-          .where(eq(photos.tripId, Number(tripId)));
-        
-        const updates: any = { photoCount: newCount };
+    if (newCount === 0) {
+      // 4a. Trip is now empty — delete it
+      await db.delete(trips).where(eq(trips.id, tid));
+    } else {
+      // 4b. Update trip metadata
+      const remaining = await db.select().from(photos).where(eq(photos.tripId, tid));
+      const [trip] = await db.select().from(trips).where(eq(trips.id, tid));
 
-        // Handle cover photo logic if necessary
-        const [trip] = await tx.select().from(trips).where(eq(trips.id, Number(tripId)));
-        if (trip.coverPhotoId === Number(photoId)) {
-          updates.coverPhotoId = remainingPhotos[0].id;
-        }
+      const updates: any = { photoCount: newCount, updatedAt: new Date() };
 
-        // Update dates
-        const dates = remainingPhotos
-          .filter((p) => p.takenAt !== null)
-          .map(p => new Date(p.takenAt!).getTime());
-        
-        if (dates.length > 0) {
-          updates.startDate = new Date(Math.min(...dates));
-          updates.endDate = new Date(Math.max(...dates));
-        }
-
-        await tx.update(trips).set(updates).where(eq(trips.id, Number(tripId)));
+      // Reassign cover if we just deleted it
+      if (trip.coverPhotoId === pid) {
+        updates.coverPhotoId = remaining[0].id;
       }
-    });
 
-    // 4. Delete from Cloudinary only after DB succeeds
+      // Recalculate date range from remaining photos (skip nulls)
+      const dates = remaining
+        .filter((p) => p.takenAt !== null)
+        .map((p) => new Date(p.takenAt!).getTime());
+
+      if (dates.length > 0) {
+        updates.startDate = new Date(Math.min(...dates));
+        updates.endDate = new Date(Math.max(...dates));
+      }
+
+      await db.update(trips).set(updates).where(eq(trips.id, tid));
+    }
+
+    // 5. Delete from Cloudinary after DB is clean (best-effort)
     if (photoToDelete.cloudinaryPublicId) {
-      await cloudinary.uploader.destroy(photoToDelete.cloudinaryPublicId);
+      try {
+        await cloudinary.uploader.destroy(photoToDelete.cloudinaryPublicId);
+      } catch (err) {
+        console.error('Cloudinary delete failed (DB already clean):', err);
+      }
     }
 
     return { statusCode: 200, body: JSON.stringify({ success: true }) };
   } catch (err: any) {
-    console.error("Critical delete failure:", err);
+    console.error('delete-photo error:', err);
     return { statusCode: 500, body: JSON.stringify({ error: err.message }) };
   }
 };
