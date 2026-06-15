@@ -1,6 +1,13 @@
 export interface Trip {
   id: number;
   name: string;
+  locationName?: string;
+  startDate?: string;
+  endDate?: string;
+  photoCount?: number;
+  coverPhotoId?: number;
+  centerLat?: number | undefined;
+  centerLng?: number | undefined;
 }
 
 export interface Photo {
@@ -16,4 +23,8 @@ export interface Photo {
   lng?: number | null;
   takenAt?: string | null;
   createdAt: string;
+}
+
+export interface TripWithPhotos extends Trip {
+  photos: Photo[];
 }
