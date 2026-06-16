@@ -264,7 +264,8 @@ export default function App() {
           <div className="animate-in fade-in duration-500">
             <button
               onClick={() => setSelectedTripId(null)}
-              className="absolute top-8 left-8 z-20 p-2 bg-zinc-900 rounded-full"
+              // className="absolute top-8 left-8 z-20 p-2 bg-zinc-900 rounded-full"
+              className="fixed top-6 left-6 z-30 p-2.5 bg-zinc-900/90 hover:bg-zinc-800 border border-zinc-700/50 backdrop-blur-sm rounded-full shadow-lg transition-colors"
             >
               <ChevronLeft />
             </button>
